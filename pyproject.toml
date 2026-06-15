@@ -1,0 +1,12 @@
+[project]
+name = "gaussian-blur-node"
+version = "1.0.0"
+description = "A Gaussian blur node for ComfyUI using OpenCV"
+requires-python = ">=3.10"
+dependencies = [
+    "opencv-python-headless",
+]
+
+[tool.comfy]
+PublisherId = "your-github-username"
+DisplayName = "gaussian-blur-node"
