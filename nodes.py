@@ -1,8 +1,5 @@
 """
-nodes.py
-
-
-MaskToTracks
+nodes.py — MaskToTracks (standalone).
 
 Turn any ComfyUI MASK into structured TRACKS data (point / box / contour / area
 per blob per frame). No SAM3, no tracker — just traces whatever mask you give
@@ -48,6 +45,7 @@ class MaskToTracks:
                 "store_contour": ("BOOLEAN", {"default": True, "tooltip": "Save the traced outline (polygon) of each blob."}),
                 "store_mask_rle": ("BOOLEAN", {"default": True, "tooltip": "Save the exact pixel mask (lossless). Turn OFF for smaller files."}),
                 "contour_simplify": ("FLOAT", {"default": 0.002, "min": 0.0, "max": 0.05, "step": 0.001, "tooltip": "Outline detail vs file size. 0 = keep every point; higher = fewer, smoother."}),
+                "contour_holes": ("BOOLEAN", {"default": False, "tooltip": "Include hole boundaries as contours. OFF = outer outline only (a donut gives one contour). ON = also trace holes (a donut gives two)."}),
                 "fps": ("FLOAT", {"default": 24.0, "min": 1.0, "max": 240.0, "step": 1.0, "tooltip": "Frames per second, stored for reference."}),
             },
         }
@@ -63,7 +61,7 @@ class MaskToTracks:
 
     def convert(self, masks, label="mask", separate_objects=True, threshold=0.5,
                 min_area=0.0, max_area=1.0, store_contour=True, store_mask_rle=True,
-                contour_simplify=0.002, fps=24.0):
+                contour_simplify=0.002, contour_holes=False, fps=24.0):
         import cv2
         arr = masks.detach().cpu().numpy()
         if arr.ndim == 2:           # a single (H,W) mask -> one frame
@@ -91,7 +89,7 @@ class MaskToTracks:
                 for oid, i in enumerate(in_range):
                     cm = (labels == i).astype(np.uint8)
                     self._add(tracks, oid, b, cm, label,
-                              store_contour, store_mask_rle, contour_simplify)
+                              store_contour, store_mask_rle, contour_simplify, contour_holes)
             else:
                 # one object: union of the surviving blobs (specks already dropped)
                 cm = np.zeros_like(binary)
@@ -104,14 +102,14 @@ class MaskToTracks:
         return (tracks,)
 
     @staticmethod
-    def _add(tracks, oid, frame, m, label, store_contour, store_mask_rle, contour_simplify):
+    def _add(tracks, oid, frame, m, label, store_contour, store_mask_rle, contour_simplify, contour_holes=False):
         bbox = bbox_from_mask(m)
         if bbox is None:
             return
         tracks.add(oid, frame, FrameDet(
             bbox=bbox,
             point=centroid_from_mask(m),
-            contour=(mask_to_contours(m, contour_simplify) if store_contour else None),
+            contour=(mask_to_contours(m, contour_simplify, contour_holes) if store_contour else None),
             area=int(m.sum()),
             score=1.0,
             visible=True,
